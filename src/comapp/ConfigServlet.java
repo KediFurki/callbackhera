@@ -20,16 +20,20 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.LoggerContext;
 
 /**
- * Startup servlet that loads external .properties and configures log4j2.
+ * Startup servlet that loads an external .properties file and optionally
+ * reconfigures log4j2 at application start.
  *
- * Configuration file location is determined by the environment variable
- * CONFIG_DIR (defaults to C:/Comapp/Config). The file name is derived from
- * the web-application context path: <CONFIG_DIR>/<web_app>.properties
+ * Configuration file location is determined by the {@code CONFIG_DIR}
+ * environment variable (default: {@code C:/Comapp/Config}).
+ * The file name is derived from the web-application context path:
+ * {@code <CONFIG_DIR>/<web_app>.properties}
  *
- * The properties file may contain:
- *   log4j2-properties-location = /path/to/log4j2.xml  (or .properties)
- *   environment = prod
- *   ... any other key=value pairs used by SystemParameters
+ * Recognised properties:
+ * <ul>
+ *   <li>{@code log4j2-properties-location} – path to a log4j2 XML/properties file</li>
+ *   <li>{@code environment}                – runtime environment label</li>
+ *   <li>Any other key=value pairs consumed by {@link SystemParameters}</li>
+ * </ul>
  */
 @WebServlet(
     name = "ConfigServlet",
@@ -46,14 +50,10 @@ public class ConfigServlet extends HttpServlet {
     /** Full path to the .properties file, e.g. C:/Comapp/Config/lead-middleware.properties */
     public static String ConfigLocation;
 
-    /** Context path without leading slash, e.g. "lead-middleware". */
+    /** Context path without the leading slash, e.g. "lead-middleware". */
     public static String web_app;
 
     public static Logger log = LogManager.getLogger("comapp");
-
-    // -------------------------------------------------------------------------
-    // Lifecycle
-    // -------------------------------------------------------------------------
 
     @Override
     public void init(ServletConfig config) throws ServletException {
@@ -61,7 +61,6 @@ public class ConfigServlet extends HttpServlet {
 
         ServletContext ctx = config.getServletContext();
 
-        // Derive application name from context path
         String contextPath = ctx.getContextPath();
         if (contextPath != null && !contextPath.isBlank()) {
             web_app = contextPath.replace("/", "");
@@ -69,14 +68,12 @@ public class ConfigServlet extends HttpServlet {
             web_app = "lead-middleware";
         }
 
-        // Resolve config directory
         String base = System.getenv("CONFIG_DIR");
         if (base == null || base.isBlank()) {
             base = "C:/Comapp/Config";
-            log.warn("==== CONFIG_DIR environment variable not found! ====");
-            log.warn("==== Falling back to default path: {} ====", base);
+            log.warn("CONFIG_DIR environment variable not set – using default: {}", base);
         } else {
-            log.info("==== Using CONFIG_DIR: {} ====", base);
+            log.info("CONFIG_DIR resolved to: {}", base);
         }
         if (!base.endsWith("/") && !base.endsWith("\\")) {
             base = base + File.separator;
@@ -84,7 +81,6 @@ public class ConfigServlet extends HttpServlet {
 
         ConfigLocation = base + web_app + ".properties";
 
-        // Read implementation version from MANIFEST.MF
         try (InputStream is = ctx.getResourceAsStream("/META-INF/MANIFEST.MF")) {
             if (is != null) {
                 Manifest mf = new Manifest(is);
@@ -97,14 +93,11 @@ public class ConfigServlet extends HttpServlet {
             log.warn("Could not read MANIFEST.MF", e);
         }
 
-        // Load properties and configure log4j2
         Properties props = getProperties();
         if (props != null && !props.isEmpty()) {
 
-            // Push all properties into SystemParameters so the rest of the app can use them
             SystemParameters.loadProperties(props);
 
-            // Optionally reconfigure log4j2
             String log4jPath = props.getProperty("log4j2-properties-location");
             if (log4jPath != null && !log4jPath.isBlank()) {
                 File f = new File(log4jPath);
@@ -114,9 +107,9 @@ public class ConfigServlet extends HttpServlet {
                         lc.setConfigLocation(f.toURI());
                         lc.reconfigure();
                         log = LogManager.getLogger("comapp");
-                        log.info("Loaded log4j2 config from {}", f.getAbsolutePath());
+                        log.info("log4j2 reconfigured from: {}", f.getAbsolutePath());
                     } catch (Exception e) {
-                        log.error("Error during log4j2 reconfiguration", e);
+                        log.error("Failed to reconfigure log4j2", e);
                     }
                 } else {
                     log.warn("log4j2 config file not found: {}", f.getAbsolutePath());
@@ -128,19 +121,15 @@ public class ConfigServlet extends HttpServlet {
             log.warn("No properties loaded from {}", ConfigLocation);
         }
 
-        log.info("==== comapp START ==== web_app={}, version={}, config={}",
+        log.info("Application started – web_app={}, version={}, config={}",
                 web_app, version, ConfigLocation);
     }
 
     @Override
     public void destroy() {
-        log.info("==== comapp STOP ==== web_app={}", web_app);
+        log.info("Application stopped – web_app={}", web_app);
         super.destroy();
     }
-
-    // -------------------------------------------------------------------------
-    // Static helpers
-    // -------------------------------------------------------------------------
 
     /**
      * Loads and returns the properties from {@link #ConfigLocation}.
@@ -165,7 +154,8 @@ public class ConfigServlet extends HttpServlet {
     }
 
     /**
-     * Saves (or updates) a single key-value pair in the properties file.
+     * Saves or updates a single key-value pair in the properties file
+     * and keeps {@link SystemParameters} in sync.
      *
      * @param key   property key
      * @param value property value
@@ -179,9 +169,8 @@ public class ConfigServlet extends HttpServlet {
         p.setProperty(key, value);
         try (OutputStream out = new FileOutputStream(ConfigLocation)) {
             p.store(out, null);
-            // Keep SystemParameters in sync
             SystemParameters.setParameter(key, value);
-            log.info("Saved property '{}' to {}", key, ConfigLocation);
+            log.info("Property '{}' saved to {}", key, ConfigLocation);
         } catch (IOException e) {
             log.error("Error saving properties to {}", ConfigLocation, e);
         }

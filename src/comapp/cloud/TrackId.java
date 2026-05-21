@@ -98,7 +98,7 @@ public class TrackId implements Cloneable, Serializable {
 
 			return copy;
 		} catch (CloneNotSupportedException e) {
-			throw new AssertionError("Clonazione fallita", e);
+			throw new AssertionError("Clone failed", e);
 		}
 	}
 

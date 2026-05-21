@@ -5,11 +5,12 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Utility class for managing system-wide parameters.
- * <p>
+ *
  * Lookup order for {@link #getParameter(String, String)}:
  * <ol>
- *   <li>In-memory map (set programmatically via {@link #setParameter}).</li>
- *   <li>Properties file loaded by {@link ConfigServlet} (if available).</li>
+ *   <li>In-memory map (set programmatically via {@link #setParameter} or
+ *       bulk-loaded via {@link #loadProperties}).</li>
+ *   <li>Properties file loaded by {@link ConfigServlet} (if initialised).</li>
  *   <li>The supplied {@code defaultValue}.</li>
  * </ol>
  */
@@ -17,26 +18,21 @@ public class SystemParameters {
 
     private static final ConcurrentHashMap<String, String> parameters = new ConcurrentHashMap<>();
 
-    private SystemParameters() {
-        // Utility class, no instantiation
-    }
+    private SystemParameters() {}
 
     /**
-     * Returns the value of the given parameter, or {@code defaultValue} if not set.
-     * Checks the in-memory map first, then the ConfigServlet properties file.
+     * Returns the value for the given key, falling back to the ConfigServlet
+     * properties file and finally to {@code defaultValue}.
      *
      * @param key          parameter name
-     * @param defaultValue value to return if parameter is not found anywhere
-     * @return resolved parameter value
+     * @param defaultValue value returned when the key is not found
+     * @return resolved value
      */
     public static String getParameter(String key, String defaultValue) {
-        // 1. In-memory map (highest priority)
         String value = parameters.get(key);
         if (value != null) {
             return value;
         }
-
-        // 2. Properties file loaded by ConfigServlet
         try {
             Properties props = ConfigServlet.getProperties();
             if (props != null) {
@@ -46,10 +42,8 @@ public class SystemParameters {
                 }
             }
         } catch (Exception ignored) {
-            // ConfigServlet may not be initialised yet (e.g. during early startup)
+            // ConfigServlet may not be initialised yet during early startup
         }
-
-        // 3. Default
         return defaultValue;
     }
 
@@ -66,10 +60,10 @@ public class SystemParameters {
     }
 
     /**
-     * Loads all entries from a {@link Properties} object into the in-memory map.
-     * Called by {@link ConfigServlet} during startup.
+     * Bulk-loads all entries from a {@link Properties} object into the
+     * in-memory map. Called by {@link ConfigServlet} during startup.
      *
-     * @param props Properties to load
+     * @param props source properties
      */
     public static void loadProperties(Properties props) {
         if (props != null) {
@@ -82,17 +76,17 @@ public class SystemParameters {
     /**
      * Removes a parameter from the in-memory map.
      *
-     * @param key parameter name to remove
+     * @param key parameter name
      */
     public static void removeParameter(String key) {
         parameters.remove(key);
     }
 
     /**
-     * Checks if a parameter is set in the in-memory map.
+     * Returns {@code true} if the key exists in the in-memory map.
      *
      * @param key parameter name
-     * @return {@code true} if the parameter exists in the in-memory map
+     * @return {@code true} if present
      */
     public static boolean hasParameter(String key) {
         return parameters.containsKey(key);
