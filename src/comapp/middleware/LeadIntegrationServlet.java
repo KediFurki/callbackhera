@@ -1,6 +1,7 @@
 package comapp.middleware;
 
 import comapp.ConfigServlet;
+import comapp.cloud.Genesys;
 import comapp.cloud.GenesysUser;
 import comapp.cloud.TrackId;
 
@@ -161,10 +162,54 @@ public class LeadIntegrationServlet extends HttpServlet {
 
             GenesysUser.log.info("{} cleanData:\n{}", trackId, cleanData.toString(2));
 
-            // TODO: Genesys callback oluştur
-            // String queueId   = props.getProperty("genesys.queueId", "");
-            // String cbUserName = phone_number;
-            // Genesys.createCallBack(trackId.toString(), guser, phone_number, queueId, cbUserName);
+            // ── Görev 1: Genesys Callback JSON body'si ────────────────────────
+
+            // routingData → queueId
+            JSONObject routingData = new JSONObject();
+            routingData.put("queueId", props.getProperty("genesys.queueId", ""));
+
+            // callbackNumbers array
+            JSONArray callbackNumbers = new JSONArray();
+            callbackNumbers.put(phone_number);
+
+            // data → müşteri verileri (ajan ekranında görünür)
+            JSONObject data = new JSONObject();
+            if (cleanData.has("requestType")) data.put("requestType", cleanData.getString("requestType"));
+            if (cleanData.has("pod"))         data.put("pod",         cleanData.getString("pod"));
+            if (cleanData.has("pdr"))         data.put("pdr",         cleanData.getString("pdr"));
+
+            // Nihai callback body
+            JSONObject callbackBody = new JSONObject();
+            callbackBody.put("routingData",      routingData);
+            callbackBody.put("callbackNumbers",  callbackNumbers);
+            callbackBody.put("callbackUserName", "HeraComm Lead");
+            callbackBody.put("data",             data);
+
+            GenesysUser.log.info("{} callbackBody:\n{}", trackId, callbackBody.toString(2));
+
+            // ── Görev 2: Genesys'e HTTP POST ──────────────────────────────────
+            String callbackUrl = "https://api."
+                    + props.getProperty("genesys.urlRegion", urlRegion)
+                    + "/api/v2/conversations/callbacks";
+
+            try {
+                org.apache.http.entity.StringEntity entity =
+                        new org.apache.http.entity.StringEntity(callbackBody.toString(), "UTF-8");
+
+                JSONObject result = Genesys.postJson(
+                        trackId.toString(), guser, callbackUrl, entity,
+                        "application/json; charset=UTF-8");
+
+                boolean success = result != null;
+                if (success) {
+                    GenesysUser.log.info("{} Lead başarıyla Genesys'e iletildi. conversationId={}",
+                            trackId, result.optString("id", "?"));
+                } else {
+                    GenesysUser.log.error("{} Genesys iletimi başarısız – null yanıt alındı", trackId);
+                }
+            } catch (Exception e) {
+                GenesysUser.log.error("{} Genesys iletimi sırasında hata oluştu", trackId, e);
+            }
 
             // AWS'ye başarılı yanıt dön
             response.setStatus(HttpServletResponse.SC_OK);

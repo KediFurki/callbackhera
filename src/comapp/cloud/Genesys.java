@@ -1003,6 +1003,28 @@ public class Genesys {
 
 	}
 
+	/**
+	 * Public bridge: POST an arbitrary JSON body to any Genesys Cloud endpoint.
+	 * Used by servlets that need to build a fully custom request body (e.g. with
+	 * routingData and extra data fields) instead of using the fixed-schema helpers.
+	 *
+	 * @param trackId     correlation ID for logging
+	 * @param guser       authenticated Genesys user (token is managed automatically)
+	 * @param urlString   full target URL
+	 * @param entity      pre-built StringEntity with the JSON payload
+	 * @param contentType MIME type, e.g. "application/json; charset=UTF-8"
+	 * @return the parsed JSONObject response, or {@code null} on failure
+	 */
+	public static JSONObject postJson(String trackId, GenesysUser guser, String urlString,
+			StringEntity entity, String contentType) {
+		try {
+			return refinePerformRequestPost(trackId, guser, urlString, entity, contentType);
+		} catch (Exception e) {
+			log.log(Level.WARN, trackId + " - postJson error", e);
+			return null;
+		}
+	}
+
 	public static JSONObject createCallBack(String trackId, GenesysUser guser, String phoneNumber, String queueId, String callbackUserName) {
 		try {
 
