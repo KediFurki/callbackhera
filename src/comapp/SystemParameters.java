@@ -5,7 +5,13 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Utility class for managing system-wide parameters.
- * Parameters can be set programmatically or loaded from a Properties object.
+ * <p>
+ * Lookup order for {@link #getParameter(String, String)}:
+ * <ol>
+ *   <li>In-memory map (set programmatically via {@link #setParameter}).</li>
+ *   <li>Properties file loaded by {@link ConfigServlet} (if available).</li>
+ *   <li>The supplied {@code defaultValue}.</li>
+ * </ol>
  */
 public class SystemParameters {
 
@@ -16,18 +22,39 @@ public class SystemParameters {
     }
 
     /**
-     * Returns the value of the given parameter, or defaultValue if not set.
+     * Returns the value of the given parameter, or {@code defaultValue} if not set.
+     * Checks the in-memory map first, then the ConfigServlet properties file.
      *
      * @param key          parameter name
-     * @param defaultValue value to return if parameter is not set
-     * @return parameter value or default
+     * @param defaultValue value to return if parameter is not found anywhere
+     * @return resolved parameter value
      */
     public static String getParameter(String key, String defaultValue) {
-        return parameters.getOrDefault(key, defaultValue);
+        // 1. In-memory map (highest priority)
+        String value = parameters.get(key);
+        if (value != null) {
+            return value;
+        }
+
+        // 2. Properties file loaded by ConfigServlet
+        try {
+            Properties props = ConfigServlet.getProperties();
+            if (props != null) {
+                value = props.getProperty(key);
+                if (value != null) {
+                    return value;
+                }
+            }
+        } catch (Exception ignored) {
+            // ConfigServlet may not be initialised yet (e.g. during early startup)
+        }
+
+        // 3. Default
+        return defaultValue;
     }
 
     /**
-     * Sets a parameter value.
+     * Sets a parameter value in the in-memory map.
      *
      * @param key   parameter name
      * @param value parameter value
@@ -39,7 +66,8 @@ public class SystemParameters {
     }
 
     /**
-     * Loads parameters from a Properties object.
+     * Loads all entries from a {@link Properties} object into the in-memory map.
+     * Called by {@link ConfigServlet} during startup.
      *
      * @param props Properties to load
      */
@@ -52,7 +80,7 @@ public class SystemParameters {
     }
 
     /**
-     * Removes a parameter.
+     * Removes a parameter from the in-memory map.
      *
      * @param key parameter name to remove
      */
@@ -61,10 +89,10 @@ public class SystemParameters {
     }
 
     /**
-     * Checks if a parameter is set.
+     * Checks if a parameter is set in the in-memory map.
      *
      * @param key parameter name
-     * @return true if the parameter exists
+     * @return {@code true} if the parameter exists in the in-memory map
      */
     public static boolean hasParameter(String key) {
         return parameters.containsKey(key);
